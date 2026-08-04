@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Car Hauler Manager</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--text:#1f2937;--muted:#6b7280;--accent:#2563eb;--danger:#dc2626}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}
+header{background:#111827;color:#fff;padding:18px 16px calc(18px + env(safe-area-inset-top));position:sticky;top:0;z-index:10}
+header h1{margin:0;font-size:22px}header p{margin:4px 0 0;color:#cbd5e1;font-size:13px}
+.wrap{max-width:900px;margin:auto;padding:14px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+.stat,.card{background:var(--card);border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.stat b{display:block;font-size:22px;margin-top:4px}.card{margin-bottom:14px}h2{font-size:18px;margin:0 0 12px}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 5px}
+input,select,textarea{width:100%;padding:11px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;background:#fff}
+textarea{min-height:70px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{border:0;border-radius:10px;padding:11px 14px;font-size:15px;font-weight:700;cursor:pointer}
+.primary{background:var(--accent);color:#fff;width:100%;margin-top:12px}.secondary{background:#e5e7eb}.danger{background:#fee2e2;color:var(--danger)}
+.toolbar,.actions{display:flex;gap:8px;flex-wrap:wrap}.trip{border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-top:10px}
+.trip-head{display:flex;justify-content:space-between;gap:10px}.trip-title{font-weight:700}.badge{padding:5px 8px;border-radius:999px;font-size:12px;font-weight:700;background:#e5e7eb}
+.small{color:var(--muted);font-size:13px;margin-top:4px;line-height:1.4}.empty{text-align:center;color:var(--muted);padding:24px 6px}
+@media(max-width:600px){.row{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header><h1>Car Hauler Manager</h1><p>Заказы, VIN, маршруты и доходы</p></header>
+<div class="wrap">
+<div class="grid">
+<div class="stat">Всего заказов<b id="sTrips">0</b></div>
+<div class="stat">Завершено<b id="sDone">0</b></div>
+<div class="stat">Доход<b id="sPay">$0</b></div>
+<div class="stat">Чистыми<b id="sNet">$0</b></div>
+</div>
+<div class="card">
+<h2>Добавить заказ</h2>
+<form id="tripForm">
+<div class="row"><div><label>Дата</label><input id="date" type="date" required></div><div><label>Номер заказа</label><input id="order"></div></div>
+<label>VIN</label><input id="vin" maxlength="17" placeholder="17 символов">
+<div class="row"><div><label>Марка / модель</label><input id="vehicle" placeholder="Toyota Camry"></div><div><label>Год</label><input id="year" type="number"></div></div>
+<label>Телефон клиента</label><input id="phone" type="tel" placeholder="+1...">
+<label>Адрес забора</label><input id="pickup">
+<label>Адрес доставки</label><input id="delivery">
+<div class="row"><div><label>Оплата ($)</label><input id="pay" type="number" step="0.01" value="0"></div><div><label>Расходы ($)</label><input id="expense" type="number" step="0.01" value="0"></div></div>
+<label>Статус</label><select id="status"><option>Pending</option><option>Picked Up</option><option>Delivered</option><option>Completed</option></select>
+<label>Заметки</label><textarea id="notes"></textarea>
+<button class="primary" type="submit">Сохранить заказ</button>
+</form></div>
+<div class="card"><h2>Мои заказы</h2>
+<div class="toolbar"><button class="secondary" onclick="exportCSV()">Экспорт CSV</button><button class="secondary" onclick="backupJSON()">Резервная копия</button><button class="danger" onclick="clearAll()">Удалить всё</button></div>
+<div id="tripList"></div></div>
+</div>
+<script>
+if('serviceWorker' in navigator){navigator.serviceWorker.register('service-worker.js')}
+let trips=JSON.parse(localStorage.getItem('carHaulerTrips')||'[]');
+const $=id=>document.getElementById(id);$('date').valueAsDate=new Date();
+$('tripForm').addEventListener('submit',e=>{e.preventDefault();trips.unshift({
+id:Date.now(),date:$('date').value,order:$('order').value.trim(),vin:$('vin').value.trim().toUpperCase(),
+vehicle:$('vehicle').value.trim(),year:$('year').value,phone:$('phone').value.trim(),pickup:$('pickup').value.trim(),
+delivery:$('delivery').value.trim(),pay:parseFloat($('pay').value)||0,expense:parseFloat($('expense').value)||0,
+status:$('status').value,notes:$('notes').value.trim()});save();e.target.reset();$('date').valueAsDate=new Date();$('pay').value=0;$('expense').value=0});
+function save(){localStorage.setItem('carHaulerTrips',JSON.stringify(trips));render()}
+function render(){const list=$('tripList'),totalPay=trips.reduce((a,t)=>a+t.pay,0),totalExpense=trips.reduce((a,t)=>a+t.expense,0);
+$('sTrips').textContent=trips.length;$('sDone').textContent=trips.filter(t=>t.status==='Completed').length;$('sPay').textContent='$'+totalPay.toFixed(2);$('sNet').textContent='$'+(totalPay-totalExpense).toFixed(2);
+if(!trips.length){list.innerHTML='<div class="empty">Пока заказов нет</div>';return}
+list.innerHTML=trips.map(t=>`<div class="trip"><div class="trip-head"><div><div class="trip-title">${esc(t.vehicle||'Автомобиль')} ${t.year?'('+t.year+')':''}</div><div class="small">${t.date||''} ${t.order?'• Order #'+esc(t.order):''}</div></div><div class="badge">${esc(t.status)}</div></div>
+<div class="small">${t.vin?'<b>VIN:</b> '+esc(t.vin)+'<br>':''}${t.phone?'<b>Телефон:</b> '+esc(t.phone)+'<br>':''}${t.pickup?'<b>Забор:</b> '+esc(t.pickup)+'<br>':''}${t.delivery?'<b>Доставка:</b> '+esc(t.delivery)+'<br>':''}<b>Оплата:</b> $${t.pay.toFixed(2)} • <b>Расходы:</b> $${t.expense.toFixed(2)} • <b>Чистыми:</b> $${(t.pay-t.expense).toFixed(2)}${t.notes?'<br><b>Заметки:</b> '+esc(t.notes):''}</div>
+<div class="actions">${t.phone?`<button class="secondary" onclick="location.href='tel:${encodeURIComponent(t.phone)}'">Позвонить</button>`:''}${t.pickup?`<button class="secondary" onclick="map('${encodeURIComponent(t.pickup)}')">К забору</button>`:''}${t.delivery?`<button class="secondary" onclick="map('${encodeURIComponent(t.delivery)}')">К доставке</button>`:''}<button class="secondary" onclick="cycle(${t.id})">Сменить статус</button><button class="danger" onclick="removeTrip(${t.id})">Удалить</button></div></div>`).join('')}
+function cycle(id){const o=['Pending','Picked Up','Delivered','Completed'],t=trips.find(x=>x.id===id);if(t){t.status=o[(o.indexOf(t.status)+1)%o.length];save()}}
+function removeTrip(id){if(confirm('Удалить заказ?')){trips=trips.filter(x=>x.id!==id);save()}}
+function clearAll(){if(confirm('Удалить все заказы?')){trips=[];save()}}
+function map(v){const a=decodeURIComponent(v);window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(a),'_blank')}
+function exportCSV(){const r=[['Date','Order','VIN','Vehicle','Year','Phone','Pickup','Delivery','Pay','Expense','Net','Status','Notes']];trips.forEach(t=>r.push([t.date,t.order,t.vin,t.vehicle,t.year,t.phone,t.pickup,t.delivery,t.pay,t.expense,t.pay-t.expense,t.status,t.notes]));download('car_hauler_trips.csv',r.map(x=>x.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\n'),'text/csv')}
+function backupJSON(){download('car_hauler_backup.json',JSON.stringify(trips,null,2),'application/json')}
+function download(n,c,t){const b=new Blob([c],{type:t}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=n;a.click();URL.revokeObjectURL(a.href)}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+render();
+</script>
+</body></html>
